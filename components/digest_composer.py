@@ -211,6 +211,28 @@ class DigestComposer:
         logger.info(f"Created {len(notion_entries)} Notion entries")
         return notion_entries
     
+    def prepare_notion_entry(self, email: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Prepare a single Notion database entry from processed email.
+        
+        Args:
+            email: Processed email data
+            
+        Returns:
+            Notion entry dictionary
+        """
+        entry = {
+            'title': email.get('subject', 'Unknown'),
+            'summary': self._format_summary_for_notion(email),
+            'importance': email.get('importance_score', 3),
+            'category': email.get('category', 'News'),
+            'link': self._get_primary_link(email),
+            'date': datetime.now().isoformat(),
+            'sender': email.get('sender', 'Unknown')
+        }
+        
+        return entry
+    
     def _format_summary_for_notion(self, email: Dict[str, Any]) -> str:
         """
         Format summary for Notion database.

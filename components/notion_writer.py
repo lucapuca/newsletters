@@ -333,6 +333,9 @@ class NotionWriter:
             # Format properties safely
             properties = self._format_properties(summary_entry)
             
+            # Limit content to exactly 2000 characters (Notion's limit)
+            limited_content = digest_content[:1999]  # Leave room for potential encoding issues
+            
             # Create the page with digest content
             page_data = {
                 "parent": {"database_id": self.database_id},
@@ -346,7 +349,7 @@ class NotionWriter:
                                 {
                                     "type": "text",
                                     "text": {
-                                        "content": digest_content[:2000]  # Limit content length
+                                        "content": limited_content
                                     }
                                 }
                             ]

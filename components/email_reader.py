@@ -162,8 +162,8 @@ class EmailReader:
             # Mark all processed emails as read
             if processed_message_ids:
                 try:
-                    # Convert list of message IDs to space-separated string
-                    message_ids_str = b' '.join(processed_message_ids)
+                    # Convert list of message IDs to comma-separated string
+                    message_ids_str = b','.join(processed_message_ids)
                     imap.store(message_ids_str, '+FLAGS', '\\Seen')
                     logger.info(f"Marked {len(processed_message_ids)} emails as read")
                 except Exception as e:
