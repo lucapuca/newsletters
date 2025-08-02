@@ -42,8 +42,15 @@ class NewsletterDigestPipeline:
         
         self.content_cleaner = ContentCleaner()
         self.cerebras_api_key = os.getenv('CEREBRAS_API_KEY')
-        self.summarizer = Summarizer(api_key=self.cerebras_api_key)
-        self.scorer = Scorer(api_key=self.cerebras_api_key)
+        self.openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+        self.summarizer = Summarizer(
+            api_key=self.cerebras_api_key,
+            openrouter_key=self.openrouter_api_key
+        )
+        self.scorer = Scorer(
+            api_key=self.cerebras_api_key,
+            openrouter_key=self.openrouter_api_key
+        )
         self.digest_composer = DigestComposer()
         self.notion_writer = NotionWriter(
             token=os.getenv('NOTION_TOKEN'),
@@ -54,7 +61,7 @@ class NewsletterDigestPipeline:
         """Validate that all required environment variables are set."""
         required_vars = [
             'EMAIL', 'EMAIL_PASSWORD', 'CEREBRAS_API_KEY',
-            'NOTION_TOKEN', 'NOTION_DATABASE_ID'
+            'NOTION_TOKEN', 'NOTION_DATABASE_ID', 'OPENROUTER_API_KEY'
         ]
         
         missing_vars = []
@@ -269,9 +276,16 @@ def main():
         logger.info("Testing connections...")
         connection_results = pipeline.test_connections()
         
-        if not all(connection_results.values()):
-            logger.error("Some connections failed. Please check your configuration.")
+        # Check critical connections (Gmail and Notion are required, Cerebras is optional due to fallback)
+        critical_connections = ['gmail', 'notion']
+        failed_critical = [conn for conn in critical_connections if not connection_results.get(conn, False)]
+        
+        if failed_critical:
+            logger.error(f"Critical connections failed: {failed_critical}. Cannot proceed.")
             return
+        
+        if not connection_results.get('cerebras', False):
+            logger.warning("Cerebras connection failed, but continuing with OpenRouter fallback available")
         
         # Run the pipeline
         results = pipeline.run()

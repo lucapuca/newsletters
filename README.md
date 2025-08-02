@@ -7,6 +7,7 @@ An intelligent Python application that automatically reads unread email newslett
 - 📧 **Smart Email Reader**: Connects to Gmail via IMAP and processes unread emails, marking them as read
 - 🧹 **Content Cleaner**: Removes email headers, footers, and boilerplate content
 - 🤖 **AI Summarization**: Uses Cerebras AI to summarize newsletters in 3 bullet points
+- 🔄 **OpenRouter Fallback**: Automatically falls back to OpenRouter.ai (z-ai/glm-4.5-air:free) when Cerebras hits rate limits (429 errors)
 - 🏷️ **Content Classification**: Categorizes content as News, Tool, or Opinion
 - ⭐ **Importance Scoring**: Rates newsletters 1-5 based on relevance to tech audience
 - 📊 **Notion Integration**: Sends individual entries and digest summaries to a Notion database
@@ -33,6 +34,7 @@ cp env.example .env
 Edit `.env` with your actual credentials:
 
 - **Cerebras API Key**: Get from [Cerebras Cloud](https://cloud.cerebras.net/)
+- **OpenRouter API Key**: Get from [OpenRouter.ai](https://openrouter.ai/) (uses z-ai/glm-4.5-air:free model as fallback for rate limits)
 - **Gmail Credentials**: Use an App Password for Gmail 2FA
 - **Notion Token**: Create an integration at [Notion Developers](https://developers.notion.com)
 - **Notion Database ID**: The ID of your target database
@@ -141,10 +143,17 @@ The system intelligently filters emails based on:
 
 ### AI Model
 
-Currently uses Cerebras Cloud with the `qwen-3-coder-480b` model for:
+**Primary**: Cerebras Cloud with the `qwen-3-coder-480b` model for:
 - Summarization (3 bullet points)
 - Classification (News/Tool/Opinion)
 - Importance scoring (1-5 scale)
+
+**Fallback**: OpenRouter.ai with `z-ai/glm-4.5-air:free` model
+- Automatically activates when Cerebras returns 429 rate limit errors
+- Uses the same prompts and scoring criteria as Cerebras
+- Completely free tier model (no cost)
+- Endpoint: `https://openrouter.ai/v1/chat/completions`
+- Seamless fallback - processing continues without interruption
 
 ### Scoring Criteria
 
@@ -167,13 +176,20 @@ The AI evaluates newsletters based on:
    - Verify your API key is valid
    - Check your Cerebras Cloud account status
    - Ensure you have sufficient credits
+   - **Note**: 429 rate limit errors automatically trigger OpenRouter fallback
 
-3. **Notion Permission Error**: 
+3. **OpenRouter Fallback Issues**:
+   - Verify your OpenRouter API key is set in `.env`
+   - Check OpenRouter account status at [openrouter.ai](https://openrouter.ai/)
+   - Model used: `z-ai/glm-4.5-air:free` (completely free)
+   - Endpoint: `https://openrouter.ai/v1/chat/completions`
+
+4. **Notion Permission Error**: 
    - Verify your integration has access to the database
    - Check database column names match exactly
    - Ensure integration token is correct
 
-4. **Empty Results**: 
+5. **Empty Results**: 
    - Check if you have unread emails
    - Verify email filtering criteria
    - Look at debug logs for rejected emails
