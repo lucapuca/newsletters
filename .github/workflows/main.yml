@@ -25,6 +25,7 @@ jobs:
       - name: Run the script
         env:
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           EMAIL: ${{ secrets.EMAIL }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
