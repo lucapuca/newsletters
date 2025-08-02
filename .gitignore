@@ -66,4 +66,11 @@ tmp/
 
 # Backup files
 *.bak
-*.backup 
+*.backup *.log
+bin/
+include/
+lib/
+pyvenv.cfg
+__pycache__/
+*.pyc
+venv/
