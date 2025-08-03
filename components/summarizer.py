@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 from cerebras.cloud.sdk import Cerebras
 import requests
 import json
+from utils.prompt_loader import load_prompt
 
 # OpenRouter API endpoint
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
@@ -38,43 +39,15 @@ class Summarizer:
         # Categories for classification
         self.categories = ["News", "Tool", "Opinion"]
         
-        # Summarization prompt template
-        self.summary_prompt = """
-Summarize this newsletter in exactly 3 bullet points. Focus on the most important and actionable information.
-
-Newsletter content:
-{content}
-
-Instructions:
-- Provide exactly 3 bullet points
-- Each bullet should be concise but informative
-- Focus on key insights, tools, or news
-- Use clear, professional language
-- Avoid marketing language and fluff
-- Extract the most relevant and interesting links from the content
-
-Format your response as:
-• [First bullet point]
-• [Second bullet point] 
-• [Third bullet point]
-
-Category: [Choose one: News, Tool, or Opinion]
-Links: [List the most relevant and interesting links mentioned in the content, separated by commas. Focus on links to articles, tools, or resources that are specifically mentioned as important or interesting. If no relevant links are found, leave this empty.]
-"""
-        
-        # Classification prompt
-        self.classification_prompt = """
-Classify this newsletter content into one of these categories:
-
-- News: Industry updates, company announcements, market changes, new product launches
-- Tool: Software, apps, resources, tutorials, how-to guides, productivity tips
-- Opinion: Commentary, analysis, predictions, thought leadership, personal insights
-
-Content:
-{content}
-
-Respond with only the category name: News, Tool, or Opinion
-"""
+        # Load prompts from markdown files
+        try:
+            self.summary_prompt = load_prompt('summarization_prompt')
+            self.classification_prompt = load_prompt('classification_prompt')
+        except FileNotFoundError as e:
+            logger.error(f"Failed to load summarization prompts: {e}")
+            # Fallback to basic prompts if files not found
+            self.summary_prompt = "Summarize this newsletter in 3 bullet points: {content}"
+            self.classification_prompt = "Classify this content as News, Tool, or Opinion: {content}"
     
     def summarize_content(self, email_data: Dict[str, Any]) -> Dict[str, Any]:
         """

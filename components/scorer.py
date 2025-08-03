@@ -6,10 +6,11 @@ Falls back to OpenRouter.ai if Cerebras returns 429 rate limit errors.
 """
 
 import os
-from typing import Dict, Any, List
 import logging
+from typing import Dict, Any, List
 import requests
 from cerebras.cloud.sdk import Cerebras
+from utils.prompt_loader import load_prompt
 
 # OpenRouter API endpoint
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
@@ -35,42 +36,15 @@ class Scorer:
         self.openrouter_model = openrouter_model or "z-ai/glm-4.5-air:free"
         self.client = Cerebras(api_key=self.api_key)
         
-        # Scoring prompt template
-        self.scoring_prompt = """
-Rate the importance of this newsletter on a scale of 1-5 for a tech entrepreneur/developer audience.
-
-Consider these factors:
-- Relevance to technology, programming, AI, startups, business
-- Actionable insights or tools
-- Industry significance and impact
-- Quality of information and analysis
-- Potential value for professional development
-
-Scoring guide:
-1 = Not relevant or low quality
-2 = Somewhat relevant but limited value
-3 = Moderately relevant with some useful information
-4 = Highly relevant with valuable insights
-5 = Extremely relevant with exceptional value
-
-Newsletter subject: {subject}
-Newsletter content: {content}
-Summary: {summary}
-
-Respond with only a number from 1 to 5.
-"""
-        
-        # Alternative scoring prompt for when we have limited content
-        self.simple_scoring_prompt = """
-Rate this newsletter's importance (1-5) for a tech audience:
-
-Subject: {subject}
-Summary: {summary}
-
-1=Not relevant, 2=Somewhat relevant, 3=Moderately relevant, 4=Highly relevant, 5=Extremely relevant
-
-Respond with only a number from 1 to 5.
-"""
+        # Load prompts from markdown files
+        try:
+            self.scoring_prompt = load_prompt('scoring_prompt')
+            self.simple_scoring_prompt = load_prompt('simple_scoring_prompt')
+        except FileNotFoundError as e:
+            logger.error(f"Failed to load scoring prompts: {e}")
+            # Fallback to basic prompts if files not found
+            self.scoring_prompt = "Rate this newsletter (1-5) for tech audience. Subject: {subject}, Content: {content}, Summary: {summary}. Respond with only a number."
+            self.simple_scoring_prompt = "Rate this newsletter (1-5) for tech audience. Subject: {subject}, Summary: {summary}. Respond with only a number."
     
     def score_newsletter(self, email_data: Dict[str, Any]) -> Dict[str, Any]:
         """
