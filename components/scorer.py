@@ -1,19 +1,14 @@
 """
 Scorer Component
 
-Uses Cerebras to assign importance scores (1-5) to newsletters based on relevance to tech audience.
-Falls back to OpenRouter.ai if Cerebras returns 429 rate limit errors.
+Uses AI to assign importance scores (1-5) to newsletters based on relevance to tech audience.
+Uses shared AIClient with Cerebras primary and OpenRouter fallback.
 """
 
-import os
 import logging
 from typing import Dict, Any, List
-import requests
-from cerebras.cloud.sdk import Cerebras
 from utils.prompt_loader import load_prompt
-
-# OpenRouter API endpoint
-OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+from utils.ai_client import create_ai_client
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +25,13 @@ class Scorer:
             openrouter_key: OpenRouter.ai API key (optional, uses env var if not provided)
             openrouter_model: OpenRouter.ai model to use (optional)
         """
-        self.api_key = api_key or os.environ.get("CEREBRAS_API_KEY")
-        self.openrouter_key = openrouter_key or os.environ.get("OPENROUTER_API_KEY")
-        self.model = model
-        self.openrouter_model = openrouter_model or "z-ai/glm-4.5-air:free"
-        self.client = Cerebras(api_key=self.api_key)
+        # Initialize shared AI client
+        self.ai_client = create_ai_client(
+            cerebras_key=api_key,
+            openrouter_key=openrouter_key,
+            cerebras_model=model,
+            openrouter_model=openrouter_model or "z-ai/glm-4.5-air:free"
+        )
         
         # Load prompts from markdown files
         try:
@@ -65,39 +62,24 @@ class Scorer:
                 logger.warning("No content to score")
                 return email_data
             
-            # Choose appropriate prompt based on available content
-            if content:
-                prompt = self.scoring_prompt.format(
-                    subject=subject,
-                    content=content[:2000],  # Limit content length
-                    summary=summary
-                )
-            else:
-                prompt = self.simple_scoring_prompt.format(
-                    subject=subject,
-                    summary=summary
-                )
+            # Choose appropriate prompt based on content availability
+            prompt = self._choose_appropriate_prompt(email_data)
             
-            # Call Cerebras
-            response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a content evaluator. Respond with only a number from 1 to 5."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                model=self.model,
-                stream=False,
-                max_completion_tokens=5,
-                temperature=0.1,
-                top_p=0.8
+            # Make API call using shared client (handles fallback automatically)
+            messages = [{
+                "role": "user",
+                "content": prompt
+            }]
+            
+            system_prompt = "You are an expert at rating newsletter importance for tech professionals. Respond with only a number from 1-5."
+            
+            score_text = self.ai_client.chat_completion(
+                messages=messages,
+                system_prompt=system_prompt,
+                max_tokens=10,
+                temperature=0.1
             )
             
-            score_text = response.choices[0].message.content.strip()
             score = self._parse_score(score_text)
             
             # Update email data
@@ -109,87 +91,31 @@ class Scorer:
             return scored_email
             
         except Exception as e:
-            # Check if it's a rate limit error (429)
-            if hasattr(e, 'status_code') and e.status_code == 429:
-                logger.warning("Cerebras rate limit exceeded. Falling back to OpenRouter.ai.")
-                return self._score_with_openrouter(email_data, prompt)
-            else:
-                logger.error(f"Error scoring newsletter: {e}")
-                # Return with default score
-                email_data['importance_score'] = 3  # Default middle score
-                return email_data
-    
-    def _score_with_openrouter(self, email_data: Dict[str, Any], prompt: str) -> Dict[str, Any]:
-        """Fallback scoring using OpenRouter.ai"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.openrouter_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://localhost:3000",
-                "X-Title": "Newsletter Digest Bot"
-            }
-            
-            # Verify API key is present
-            if not self.openrouter_key or not self.openrouter_key.strip():
-                logger.error("OpenRouter API key is missing or empty")
-                return {'score': 1, 'reasoning': 'OpenRouter API key missing - using default score'}
-            data = {
-                "model": self.openrouter_model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a content evaluator. Respond with only a number from 1 to 5."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "max_tokens": 5,
-                "temperature": 0.1,
-                "top_p": 0.8
-            }
-            
-            response = requests.post(OPENROUTER_ENDPOINT, 
-                                   headers=headers, json=data, timeout=30)
-            
-            logger.info(f"OpenRouter response status: {response.status_code}")
-            logger.info(f"OpenRouter response headers: {dict(response.headers)}")
-            logger.info(f"OpenRouter response text: {response.text[:500]}...")
-            
-            response.raise_for_status()
-            
-            if not response.text.strip():
-                logger.error("OpenRouter returned empty response")
-                return {'score': 1, 'reasoning': 'OpenRouter fallback failed - using default score'}
-            
-            # Check if response is HTML (authentication failure)
-            if response.text.strip().startswith('<!DOCTYPE html>'):
-                logger.error("OpenRouter returned HTML instead of JSON - likely authentication failure")
-                logger.error("Please verify your OpenRouter API key is valid and not expired")
-                return {'score': 1, 'reasoning': 'OpenRouter authentication failed - using default score'}
-            
-            try:
-                score_text = response.json()["choices"][0]["message"]["content"].strip()
-            except (KeyError, IndexError, ValueError) as e:
-                logger.error(f"Failed to parse OpenRouter response: {e}")
-                logger.error(f"Response content: {response.text[:200]}...")
-                return {'score': 1, 'reasoning': 'OpenRouter response parsing failed - using default score'}
-            score = self._parse_score(score_text)
-            
-            # Update email data
-            scored_email = email_data.copy()
-            scored_email['importance_score'] = score
-            
-            logger.info(f"Scored with OpenRouter: {email_data.get('subject', '')} -> {score}/5")
-            
-            return scored_email
-            
-        except Exception as e:
-            logger.error(f"Error scoring newsletter with OpenRouter: {e}")
+            logger.error(f"Error scoring newsletter: {e}")
             # Return with default score
             email_data['importance_score'] = 3  # Default middle score
             return email_data
+    
+    def _choose_appropriate_prompt(self, email_data: Dict[str, Any]) -> str:
+        subject = email_data.get('subject', '')
+        content = email_data.get('cleaned_body', '')
+        summary = email_data.get('full_summary', '')
+        
+        if content:
+            prompt = self.scoring_prompt.format(
+                subject=subject,
+                content=content[:2000],  # Limit content length
+                summary=summary
+            )
+        else:
+            prompt = self.simple_scoring_prompt.format(
+                subject=subject,
+                summary=summary
+            )
+        
+        return prompt
+    
+
     
     def _parse_score(self, score_text: str) -> int:
         """

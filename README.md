@@ -23,7 +23,15 @@ An intelligent Python application that automatically reads unread email newslett
 pip install -r requirements.txt
 ```
 
-### 2. Environment Configuration
+### 2. Install Test Dependencies (Optional)
+
+For running the test suite:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+### 3. Environment Configuration
 
 Copy the environment template and fill in your credentials:
 
@@ -39,13 +47,13 @@ Edit `.env` with your actual credentials:
 - **Notion Token**: Create an integration at [Notion Developers](https://developers.notion.com)
 - **Notion Database ID**: The ID of your target database
 
-### 3. Gmail Setup
+### 4. Gmail Setup
 
 1. Enable 2-Factor Authentication on your Gmail account
 2. Generate an App Password: Google Account → Security → App Passwords
 3. Use the App Password in your `.env` file (not your regular password)
 
-### 4. Notion Database Setup
+### 5. Notion Database Setup
 
 Create a Notion database with these columns:
 - **Title** (Text) - Email subject
@@ -76,19 +84,92 @@ newsletters/
 │   ├── __init__.py
 │   ├── email_reader.py      # Gmail IMAP connection & unread email processing
 │   ├── content_cleaner.py   # Email content extraction & cleaning
-│   ├── summarizer.py        # Cerebras AI summarization
-│   ├── scorer.py           # Importance scoring
+│   ├── summarizer.py        # AI summarization with fallback
+│   ├── scorer.py           # Importance scoring with fallback
 │   ├── digest_composer.py  # Digest formatting & Notion entry preparation
 │   └── notion_writer.py    # Notion API integration
-├── main.py                 # Main pipeline with individual email processing
-├── test_pipeline.py        # Test script
-├── scheduler.py            # Cron scheduler
-├── requirements.txt        # Dependencies
-├── env.example            # Environment template
-└── README.md             # This file
+├── utils/
+│   ├── __init__.py
+│   ├── prompt_loader.py     # Dynamic prompt loading from markdown
+│   └── ai_client.py        # Shared AI client (Cerebras + OpenRouter)
+├── prompts/
+│   ├── scoring_prompt.md           # Detailed scoring prompt
+│   ├── simple_scoring_prompt.md    # Simple scoring prompt
+│   ├── summarization_prompt.md     # Summarization prompt
+│   └── classification_prompt.md    # Content classification prompt
+├── tests/
+│   ├── fixtures.py          # Test data and mock responses
+│   ├── test_prompt_loader.py # Prompt loading tests
+│   ├── test_scorer.py       # Scoring component tests
+│   ├── test_summarizer.py   # Summarization component tests
+│   ├── test_pipeline.py     # Integration tests
+│   └── test_runner.py       # Custom test runner
+├── main.py                  # Main pipeline orchestrator
+├── scheduler.py             # Cron scheduler
+├── requirements.txt         # Production dependencies
+├── requirements-test.txt    # Test dependencies
+├── pytest.ini             # Test configuration
+├── env.example             # Environment template
+└── README.md              # This file
 ```
 
+## Testing
+
+**🧪 Always run tests before running the app to ensure everything is working correctly!**
+
+### Running Tests
+
+```bash
+# Run all tests (recommended)
+python3 -m pytest tests/ -v
+
+# Run specific test files
+python3 -m pytest tests/test_prompt_loader.py -v
+python3 -m pytest tests/test_scorer.py -v
+python3 -m pytest tests/test_summarizer.py -v
+
+# Run tests quietly (less verbose)
+python3 -m pytest tests/
+
+# Use the custom test runner
+python3 tests/test_runner.py
+
+# Run tests with coverage (if pytest-cov installed)
+python3 -m pytest tests/ --cov=components --cov=utils
+```
+
+### Test Structure
+
+```
+tests/
+├── fixtures.py           # Test data and mock responses
+├── test_prompt_loader.py  # Prompt loading utility tests
+├── test_scorer.py        # Newsletter scoring tests
+├── test_summarizer.py    # AI summarization tests
+├── test_pipeline.py      # Integration tests
+└── test_runner.py        # Custom test runner
+```
+
+### What Tests Cover
+
+- ✅ **Prompt Loading**: Dynamic loading from markdown files
+- ✅ **AI Scoring**: Newsletter importance scoring (1-5)
+- ✅ **AI Summarization**: Content summarization and classification
+- ✅ **API Fallbacks**: Cerebras → OpenRouter fallback logic
+- ✅ **Error Handling**: Graceful degradation when APIs fail
+- ✅ **Pipeline Integration**: End-to-end workflow testing
+
 ## Usage
+
+### Recommended Workflow
+
+```bash
+# 1. First, run tests to ensure everything works
+python3 -m pytest tests/ -v
+
+# 2. If tests pass, run the app
+python3 main.py
+```
 
 ### Daily Execution
 
@@ -98,18 +179,15 @@ Add to your crontab for daily execution:
 # Edit crontab
 crontab -e
 
-# Add this line to run daily at 9 AM
-0 9 * * * cd /path/to/newsletters && python main.py
+# Add this line to run daily at 9 AM (with testing)
+0 9 * * * cd /path/to/newsletters && python3 -m pytest tests/ -q && python3 main.py
 ```
 
 ### Manual Execution
 
 ```bash
 # Run the complete pipeline
-python main.py
-
-# Test with sample data
-python test_pipeline.py
+python3 main.py
 ```
 
 ## How It Works
